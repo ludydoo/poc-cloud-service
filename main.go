@@ -216,7 +216,8 @@ func makeTenantApplication(tenant tenant) *unstructured.Unstructured {
 		},
 		"syncPolicy": map[string]interface{}{
 			"automated": map[string]interface{}{
-				"prune": true,
+				"prune":    true,
+				"selfHeal": true,
 			},
 		},
 	}
