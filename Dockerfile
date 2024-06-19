@@ -9,4 +9,3 @@ FROM alpine:latest
 COPY --chown=65534:65534 --from=builder /go/src/github.com/ludydoo/poc-cloud-service/app .
 USER 65534:65534
 CMD ["./app"]
-
