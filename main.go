@@ -10,7 +10,7 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		l := log.FromContext(r.Context())
 		l.Info("Hello, World!")
-		fmt.Fprintf(w, "Hello, World ")
+		fmt.Fprintf(w, "Hello, World")
 	})
 	http.ListenAndServe(":8080", nil)
 }
