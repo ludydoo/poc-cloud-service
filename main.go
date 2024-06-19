@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"net/http"
+	"time"
+
 	// argocd client
 	_ "github.com/argoproj/argo-cd/v2/pkg/apiclient"
 	"k8s.io/client-go/dynamic"
@@ -26,18 +28,29 @@ func main() {
 
 	apps := dynamicClient.Resource(v1alpha1.Resource("applications").WithVersion("v1alpha1"))
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 
-		list, err := apps.Namespace("").List(r.Context(), metav1.ListOptions{})
-		if err != nil {
-			fmt.Fprintf(w, "Error: %v", err)
-			return
+	ctx := context.Background()
+
+	go func() {
+		for range ticker.C {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				list, err := apps.Namespace("").List(ctx, metav1.ListOptions{})
+				if err != nil {
+					fmt.Printf("Error: %v", err)
+					continue
+				}
+				for _, item := range list.Items {
+					fmt.Printf("Name: %s\n", item.GetName())
+				}
+			}
 		}
+	}()
 
-		for _, item := range list.Items {
-			fmt.Fprintf(w, "Name: %s\n", item.GetName())
-		}
+	<-ctx.Done()
 
-	})
-	http.ListenAndServe(":8080", nil)
 }
