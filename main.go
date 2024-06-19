@@ -51,8 +51,8 @@ func main() {
 			case <-ctx.Done():
 				return
 			default:
-				if reconcileTenants(ctx, client, dynamicClient) {
-					return
+				if err := reconcileTenants(ctx, client, dynamicClient); err != nil {
+					fmt.Printf("Error: %v", err)
 				}
 			}
 		}
