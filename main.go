@@ -41,6 +41,7 @@ func main() {
 					fmt.Printf("Error: %v", err)
 					continue
 				}
+
 				for _, item := range list.Items {
 					fmt.Printf("Name: %s\n", item.GetName())
 				}
