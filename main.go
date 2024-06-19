@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -13,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"os"
+	"poc-cloud-service/log"
 	"time"
 )
 
@@ -44,6 +46,7 @@ func main() {
 	defer ticker.Stop()
 
 	ctx := context.Background()
+	l := log.FromContext(ctx)
 
 	go func() {
 		for range ticker.C {
@@ -52,7 +55,7 @@ func main() {
 				return
 			default:
 				if err := reconcileTenants(ctx, client, dynamicClient); err != nil {
-					fmt.Printf("Error: %v", err)
+					l.Error("Error reconciling tenants", zap.Error(err))
 				}
 			}
 		}
