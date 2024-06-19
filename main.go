@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"time"
-
-	// argocd client
-	_ "github.com/argoproj/argo-cd/v2/pkg/apiclient"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"time"
 )
 
 func main() {
