@@ -212,7 +212,9 @@ func makeTenantApplication(tenant tenant) *unstructured.Unstructured {
 			"namespace": fmt.Sprintf("tenant-%s", tenant.ID),
 		},
 		"syncPolicy": map[string]interface{}{
-			"automated": map[string]interface{}{},
+			"automated": map[string]interface{}{
+				"prune": true,
+			},
 		},
 	}
 
