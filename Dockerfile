@@ -7,4 +7,4 @@ COPY . .
 RUN go build -o /poc-cloud-service
 FROM alpine:3.9
 COPY --from=builder /poc-cloud-service /app
-CMD ["./app"]
+CMD ["/app"]
