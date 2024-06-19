@@ -54,6 +54,7 @@ func main() {
 			case <-ctx.Done():
 				return
 			default:
+				l.Info("Reconciling tenants")
 				if err := reconcileTenants(ctx, client, dynamicClient); err != nil {
 					l.Error("Error reconciling tenants", zap.Error(err))
 				}
@@ -62,10 +63,13 @@ func main() {
 	}()
 
 	<-ctx.Done()
+	l.Info("Shutting down")
 
 }
 
 func reconcileTenants(ctx context.Context, client *kubernetes.Clientset, dynamicClient *dynamic.DynamicClient) error {
+
+	l := log.FromContext(ctx)
 
 	// Want is the desired state
 	want, err := getWant()
@@ -89,6 +93,7 @@ func reconcileTenants(ctx context.Context, client *kubernetes.Clientset, dynamic
 
 	// Delete tenants that are not in the desired state
 	for _, tenant := range toDelete {
+		l.Info("Deleting tenant", zap.String("id", tenant.ID))
 		if err := deleteTenant(ctx, client, dynamicClient, tenant); err != nil {
 			return err
 		}
@@ -96,6 +101,7 @@ func reconcileTenants(ctx context.Context, client *kubernetes.Clientset, dynamic
 
 	// Create/Update tenants
 	for _, tenant := range want {
+		l.Info("Upserting tenant", zap.String("id", tenant.ID))
 		if err := ensureTenantNamespace(ctx, client, tenant); err != nil {
 			return err
 		}
@@ -167,7 +173,7 @@ func ensureTenantApplication(ctx context.Context, client dynamic.Interface, tena
 	apps := client.Resource(applicationsGVR)
 
 	want := makeTenantApplication(tenant)
-	_, err := apps.Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
+	got, err := apps.Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return err
@@ -179,7 +185,8 @@ func ensureTenantApplication(ctx context.Context, client dynamic.Interface, tena
 	}
 
 	// update
-	if _, err := apps.Namespace("openshift-gitops").Update(ctx, want, metav1.UpdateOptions{}); err != nil {
+	got.Object["spec"] = want.Object["spec"]
+	if _, err := apps.Namespace("openshift-gitops").Update(ctx, got, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 
