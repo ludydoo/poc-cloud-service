@@ -16,6 +16,12 @@ import (
 	"time"
 )
 
+var applicationsGVR = schema.GroupVersionResource{
+	Group:    "argoproj.io",
+	Version:  "v1alpha1",
+	Resource: "applications",
+}
+
 func main() {
 
 	// in-cluster kubeconfig
@@ -45,21 +51,8 @@ func main() {
 			case <-ctx.Done():
 				return
 			default:
-				tenants, err := getTenants()
-				if err != nil {
-					fmt.Printf("Error: %v", err)
-					continue
-				}
-
-				for _, tenant := range tenants {
-					if err := ensureTenantNamespace(ctx, client, tenant); err != nil {
-						fmt.Printf("Error: %v", err)
-						return
-					}
-					if err := ensureTenantApplication(ctx, dynamicClient, tenant); err != nil {
-						fmt.Printf("Error: %v", err)
-						return
-					}
+				if reconcileTenants(ctx, client, dynamicClient) {
+					return
 				}
 			}
 		}
@@ -67,6 +60,48 @@ func main() {
 
 	<-ctx.Done()
 
+}
+
+func reconcileTenants(ctx context.Context, client *kubernetes.Clientset, dynamicClient *dynamic.DynamicClient) error {
+
+	// Want is the desired state
+	want, err := getWant()
+	if err != nil {
+		return err
+	}
+
+	// Existing is the current state
+	existing, err := getExisting(ctx, client)
+	if err != nil {
+		return err
+	}
+
+	toDelete := map[string]tenant{}
+	for _, tenant := range existing {
+		toDelete[tenant.ID] = tenant
+	}
+	for _, tenant := range want {
+		delete(toDelete, tenant.ID)
+	}
+
+	// Delete tenants that are not in the desired state
+	for _, tenant := range toDelete {
+		if err := deleteTenant(ctx, client, dynamicClient, tenant); err != nil {
+			return err
+		}
+	}
+
+	// Create/Update tenants
+	for _, tenant := range want {
+		if err := ensureTenantNamespace(ctx, client, tenant); err != nil {
+			return err
+		}
+		if err := ensureTenantApplication(ctx, dynamicClient, tenant); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 type tenant struct {
@@ -96,12 +131,37 @@ func ensureTenantNamespace(ctx context.Context, client kubernetes.Interface, ten
 
 }
 
+func deleteTenant(ctx context.Context, client kubernetes.Interface, dynamicClient dynamic.Interface, tenant tenant) error {
+	if err := deleteTenantApp(ctx, dynamicClient, tenant); err != nil {
+		return err
+	}
+	if err := deleteTenantNamespace(ctx, client, tenant); err != nil {
+		return err
+	}
+	return nil
+}
+
+func deleteTenantApp(ctx context.Context, dynamicClient dynamic.Interface, tenant tenant) error {
+	err := dynamicClient.
+		Resource(applicationsGVR).
+		Namespace("openshift-gitops").
+		Delete(ctx, getTenantNamespaceName(tenant), metav1.DeleteOptions{})
+	if !errors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+func deleteTenantNamespace(ctx context.Context, client kubernetes.Interface, tenant tenant) error {
+	err := client.CoreV1().Namespaces().Delete(ctx, getTenantNamespaceName(tenant), metav1.DeleteOptions{})
+	if !errors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
 func ensureTenantApplication(ctx context.Context, client dynamic.Interface, tenant tenant) error {
-	apps := client.Resource(schema.GroupVersionResource{
-		Group:    "argoproj.io",
-		Version:  "v1alpha1",
-		Resource: "applications",
-	})
+	apps := client.Resource(applicationsGVR)
 
 	want := makeTenantApplication(tenant)
 	_, err := apps.Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
@@ -159,7 +219,25 @@ func makeTenantApplication(tenant tenant) *unstructured.Unstructured {
 	return u
 }
 
-func getTenants() ([]tenant, error) {
+func getExisting(ctx context.Context, client kubernetes.Interface) ([]tenant, error) {
+	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
+		LabelSelector: "is-tenant=true",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var tenants []tenant
+	for _, ns := range namespaces.Items {
+		tenants = append(tenants, tenant{
+			ID: ns.Name[len("tenant-"):],
+		})
+	}
+
+	return tenants, nil
+}
+
+func getWant() ([]tenant, error) {
 	dataFile, err := os.ReadFile("/data/tenants")
 	if err != nil {
 		fmt.Printf("Error: %v", err)
