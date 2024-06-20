@@ -1,0 +1,1 @@
+alter table tenants add column target_revision text not null default '';

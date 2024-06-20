@@ -9,11 +9,16 @@ import { useCallback } from 'react'
 import { CreateTenantRequest } from '@/api'
 import { parse } from 'yaml'
 import { useNavigate } from 'react-router-dom'
-import { defaultPath, defaultRepositoryURL } from '@/pages/tenants/constants.ts'
+import {
+  defaultPath,
+  defaultRepositoryURL,
+  defaultTargetRevision,
+} from '@/pages/tenants/constants.ts'
 
 interface Data {
   repoURL: string
   path: string
+  targetRevision: string
   helmValues: string
 }
 
@@ -27,6 +32,7 @@ export default function CreateTenantPage() {
         source: {
           repoUrl: data.repoURL,
           path: data.path,
+          targetRevision: data.targetRevision,
           helm: {
             values: parse(data.helmValues) as object,
           },
@@ -57,6 +63,13 @@ export default function CreateTenantPage() {
             <Field>
               <Label>Path</Label>
               <Input {...register('path')} placeholder={defaultPath} />
+            </Field>
+            <Field>
+              <Label>Target Revision</Label>
+              <Input
+                {...register('targetRevision')}
+                placeholder={defaultTargetRevision}
+              />
             </Field>
             <Field>
               <Label>Helm Values</Label>

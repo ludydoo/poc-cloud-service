@@ -225,6 +225,9 @@
         "path": {
           "type": "string"
         },
+        "targetRevision": {
+          "type": "string"
+        },
         "helm": {
           "$ref": "#/definitions/Helm"
         }

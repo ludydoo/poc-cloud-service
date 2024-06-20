@@ -10,16 +10,17 @@ import (
 )
 
 const createTenant = `-- name: CreateTenant :one
-insert into tenants (id, repo_url, path, values)
-values ($1, $2, $3, $4)
-returning id, repo_url, path, values
+insert into tenants (id, repo_url, path, target_revision, values)
+values ($1, $2, $3, $4, $5)
+returning id, repo_url, path, values, target_revision
 `
 
 type CreateTenantParams struct {
-	ID      string
-	RepoUrl string
-	Path    string
-	Values  []byte
+	ID             string
+	RepoUrl        string
+	Path           string
+	TargetRevision string
+	Values         []byte
 }
 
 func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error) {
@@ -27,6 +28,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 		arg.ID,
 		arg.RepoUrl,
 		arg.Path,
+		arg.TargetRevision,
 		arg.Values,
 	)
 	var i Tenant
@@ -35,6 +37,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 		&i.RepoUrl,
 		&i.Path,
 		&i.Values,
+		&i.TargetRevision,
 	)
 	return i, err
 }
@@ -42,7 +45,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 const deleteTenant = `-- name: DeleteTenant :one
 delete from tenants
 where id = $1
-returning id, repo_url, path, values
+returning id, repo_url, path, values, target_revision
 `
 
 func (q *Queries) DeleteTenant(ctx context.Context, id string) (Tenant, error) {
@@ -53,12 +56,13 @@ func (q *Queries) DeleteTenant(ctx context.Context, id string) (Tenant, error) {
 		&i.RepoUrl,
 		&i.Path,
 		&i.Values,
+		&i.TargetRevision,
 	)
 	return i, err
 }
 
 const getTenantByID = `-- name: GetTenantByID :one
-select id, repo_url, path, values from tenants
+select id, repo_url, path, values, target_revision from tenants
 where id = $1
 `
 
@@ -70,12 +74,13 @@ func (q *Queries) GetTenantByID(ctx context.Context, id string) (Tenant, error) 
 		&i.RepoUrl,
 		&i.Path,
 		&i.Values,
+		&i.TargetRevision,
 	)
 	return i, err
 }
 
 const listTenants = `-- name: ListTenants :many
-select id, repo_url, path, values from tenants
+select id, repo_url, path, values, target_revision from tenants
 order by id
 `
 
@@ -93,6 +98,7 @@ func (q *Queries) ListTenants(ctx context.Context) ([]Tenant, error) {
 			&i.RepoUrl,
 			&i.Path,
 			&i.Values,
+			&i.TargetRevision,
 		); err != nil {
 			return nil, err
 		}
@@ -106,16 +112,17 @@ func (q *Queries) ListTenants(ctx context.Context) ([]Tenant, error) {
 
 const updateTenant = `-- name: UpdateTenant :one
 update tenants
-set repo_url = $2, path = $3, values = $4
+set repo_url = $2, path = $3, target_revision = $4, values = $5
 where id = $1
-returning id, repo_url, path, values
+returning id, repo_url, path, values, target_revision
 `
 
 type UpdateTenantParams struct {
-	ID      string
-	RepoUrl string
-	Path    string
-	Values  []byte
+	ID             string
+	RepoUrl        string
+	Path           string
+	TargetRevision string
+	Values         []byte
 }
 
 func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error) {
@@ -123,6 +130,7 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Ten
 		arg.ID,
 		arg.RepoUrl,
 		arg.Path,
+		arg.TargetRevision,
 		arg.Values,
 	)
 	var i Tenant
@@ -131,6 +139,7 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Ten
 		&i.RepoUrl,
 		&i.Path,
 		&i.Values,
+		&i.TargetRevision,
 	)
 	return i, err
 }

@@ -40,6 +40,12 @@ export interface Source {
     path?: string;
     /**
      * 
+     * @type {string}
+     * @memberof Source
+     */
+    targetRevision?: string;
+    /**
+     * 
      * @type {Helm}
      * @memberof Source
      */
@@ -65,6 +71,7 @@ export function SourceFromJSONTyped(json: any, ignoreDiscriminator: boolean): So
         
         'repoUrl': json['repoUrl'] == null ? undefined : json['repoUrl'],
         'path': json['path'] == null ? undefined : json['path'],
+        'targetRevision': json['targetRevision'] == null ? undefined : json['targetRevision'],
         'helm': json['helm'] == null ? undefined : HelmFromJSON(json['helm']),
     };
 }
@@ -77,6 +84,7 @@ export function SourceToJSON(value?: Source | null): any {
         
         'repoUrl': value['repoUrl'],
         'path': value['path'],
+        'targetRevision': value['targetRevision'],
         'helm': HelmToJSON(value['helm']),
     };
 }

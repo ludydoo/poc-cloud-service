@@ -3,4 +3,6 @@ const defaultRepositoryURL =
 
 const defaultPath = 'tenant-manifests'
 
-export { defaultRepositoryURL, defaultPath }
+const defaultTargetRevision = 'HEAD'
+
+export { defaultRepositoryURL, defaultPath, defaultTargetRevision }

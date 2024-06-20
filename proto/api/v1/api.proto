@@ -12,7 +12,8 @@ message Helm {
 message Source {
   string repo_url = 1;
   string path = 2;
-  Helm helm = 3;
+  string target_revision = 3;
+  Helm helm = 4;
 }
 
 message Tenant {

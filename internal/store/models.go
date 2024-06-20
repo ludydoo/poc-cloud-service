@@ -5,8 +5,9 @@
 package store
 
 type Tenant struct {
-	ID      string
-	RepoUrl string
-	Path    string
-	Values  []byte
+	ID             string
+	RepoUrl        string
+	Path           string
+	Values         []byte
+	TargetRevision string
 }

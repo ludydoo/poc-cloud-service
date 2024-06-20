@@ -9,11 +9,16 @@ import { useCallback, useEffect } from 'react'
 import { TenantServiceUpdateTenantBody } from '@/api'
 import { parse, stringify } from 'yaml'
 import { useNavigate, useParams } from 'react-router-dom'
-import { defaultPath, defaultRepositoryURL } from '@/pages/tenants/constants.ts'
+import {
+  defaultPath,
+  defaultRepositoryURL,
+  defaultTargetRevision,
+} from '@/pages/tenants/constants.ts'
 interface Data {
   id: string
   repoURL: string
   path: string
+  targetRevision: string
   helmValues: string
 }
 
@@ -30,6 +35,8 @@ export default function EditTenantPage() {
     reset({
       id: data.tenant.id,
       repoURL: data.tenant.source?.repoUrl || '',
+      targetRevision:
+        data.tenant.source?.targetRevision || defaultTargetRevision,
       helmValues: data.tenant.source?.helm?.values
         ? stringify(data.tenant.source?.helm?.values, null, 2)
         : '',
@@ -44,6 +51,7 @@ export default function EditTenantPage() {
         source: {
           repoUrl: data.repoURL,
           path: data.path,
+          targetRevision: data.targetRevision,
           helm: {
             values: parse(data.helmValues) as object,
           },
@@ -78,6 +86,13 @@ export default function EditTenantPage() {
             <Field>
               <Label>Path</Label>
               <Input {...register('path')} placeholder={defaultPath} />
+            </Field>
+            <Field>
+              <Label>Target Revision</Label>
+              <Input
+                {...register('targetRevision')}
+                placeholder={defaultTargetRevision}
+              />
             </Field>
             <Field>
               <Label>Helm Values</Label>

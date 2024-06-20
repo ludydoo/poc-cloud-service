@@ -35,6 +35,7 @@ func (s *Server) CreateTenant(ctx context.Context, request *v1.CreateTenantReque
 		RepoUrl: request.GetSource().RepoUrl,
 		Path:    request.GetSource().GetPath(),
 		Values:  valuesJson,
+		TargetRevision: request.GetSource().GetTargetRevision(),
 	})
 	if err != nil {
 		return nil, err
@@ -91,10 +92,11 @@ func (s *Server) UpdateTenant(ctx context.Context, request *v1.UpdateTenantReque
 		return nil, err
 	}
 	updated, err := s.store.UpdateTenant(ctx, store.UpdateTenantParams{
-		ID:      request.Id,
-		RepoUrl: request.GetSource().GetRepoUrl(),
-		Path:    request.GetSource().GetPath(),
-		Values:  valuesJson,
+		ID:        request.Id,
+		RepoUrl:   request.GetSource().GetRepoUrl(),
+		Path:      request.GetSource().GetPath(),
+		Values:    valuesJson,
+		TargetRevision: request.GetSource().GetTargetRevision(),
 	})
 	if err != nil {
 		return nil, err

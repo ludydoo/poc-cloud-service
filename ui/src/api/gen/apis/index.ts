@@ -1,3 +1,3 @@
 /* tslint:disable */
-
-export * from './TenantServiceApi'
+/* eslint-disable */
+export * from './TenantServiceApi';

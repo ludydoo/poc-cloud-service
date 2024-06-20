@@ -1,4 +1,4 @@
-import { Heading } from '@/components/heading.tsx'
+import { Heading, Subheading } from '@/components/heading.tsx'
 import {
   DescriptionDetails,
   DescriptionList,
@@ -11,9 +11,15 @@ import { defaultPath, defaultRepositoryURL } from '@/pages/tenants/constants.ts'
 import clsx from 'clsx'
 import { Button } from '@/components/button.tsx'
 import { stringify } from 'yaml'
-import { TextLink } from '@/components/text.tsx'
+import { Text, TextLink } from '@/components/text.tsx'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogTitle,
+} from '@/components/dialog.tsx'
 
 function TenantPath({ tenant }: { tenant: Tenant }) {
   const hasPath = !!tenant.source?.path
@@ -49,6 +55,7 @@ export default function TenantDetailsPage() {
   if (!id) {
     throw new Error('No tenant ID provided')
   }
+  const [showConfirmation, onShowConfirmation] = useState(false)
   const { data, isLoading, isError } = useTenant(id)
   const { mutate: deleteTenant } = useDeleteTenant()
   const nav = useNavigate()
@@ -94,10 +101,32 @@ export default function TenantDetailsPage() {
         </DescriptionList>
       </div>
       <div className="mt-6">
-        <Button color="red" onClick={handleDeleteTenant}>
-          Delete tenant
-        </Button>
+        <div className="space-y-4 rounded-lg border border-red-500 bg-red-50 p-4">
+          <Subheading>
+            <span className="text-red-500">Danger zone</span>
+          </Subheading>
+          <Button color="red" onClick={() => onShowConfirmation(true)}>
+            Delete tenant
+          </Button>
+        </div>
       </div>
+      <Dialog open={showConfirmation} onClose={onShowConfirmation}>
+        <DialogTitle>Are you sure?</DialogTitle>
+        <DialogBody>
+          <Text>
+            Are you sure you want to delete the tenant? This action cannot be
+            undone.
+          </Text>
+        </DialogBody>
+        <DialogActions>
+          <Button color="dark/zinc" onClick={() => onShowConfirmation(false)}>
+            Do not delete
+          </Button>
+          <Button color="red" onClick={handleDeleteTenant}>
+            Yes, delete tenant {data ? data.tenant.id : ''}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   )
 }

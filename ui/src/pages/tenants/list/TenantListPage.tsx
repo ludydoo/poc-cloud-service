@@ -21,7 +21,7 @@ export default function TenantListPage() {
           Create tenant
         </Button>
       </div>
-      <Table>
+      <Table className="mt-6">
         <TableHead>
           <TableRow>
             <TableHeader>ID</TableHeader>

@@ -23,8 +23,9 @@ func TenantFromStore(tenant store.Tenant) (*v1.Tenant, error) {
 		return nil, fmt.Errorf("bad helm value format")
 	}
 	source := &v1.Source{
-		RepoUrl: tenant.RepoUrl,
-		Path:    tenant.Path,
+		RepoUrl:        tenant.RepoUrl,
+		Path:           tenant.Path,
+		TargetRevision: tenant.TargetRevision,
 		Helm: &v1.Helm{
 			Values: helmValues.GetStructValue(),
 		},
