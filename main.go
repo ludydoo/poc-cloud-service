@@ -25,6 +25,10 @@ var applicationsGVR = schema.GroupVersionResource{
 	Resource: "applications",
 }
 
+const (
+	namespacePrefix = "acs-"
+)
+
 func main() {
 
 	// in-cluster kubeconfig
@@ -70,8 +74,6 @@ func main() {
 
 func reconcileTenants(ctx context.Context, client *kubernetes.Clientset, dynamicClient *dynamic.DynamicClient) error {
 
-	l := log.FromContext(ctx)
-
 	// Want is the desired state
 	want, err := getWant()
 	if err != nil {
@@ -94,18 +96,17 @@ func reconcileTenants(ctx context.Context, client *kubernetes.Clientset, dynamic
 
 	// Delete tenants that are not in the desired state
 	for _, tenant := range toDelete {
-		l.Info("Deleting tenant", zap.String("id", tenant.ID))
-		if err := deleteTenant(ctx, client, dynamicClient, tenant); err != nil {
+		if err := deleteTenant(log.WithTenant(ctx, tenant.ID), client, dynamicClient, tenant); err != nil {
 			return err
 		}
 	}
 
 	// Create/Update tenants
 	for _, tenant := range want {
-		if err := ensureTenantNamespace(ctx, client, tenant); err != nil {
+		if err := ensureTenantNamespace(log.WithTenant(ctx, tenant.ID), client, tenant); err != nil {
 			return err
 		}
-		if err := ensureTenantApplication(ctx, dynamicClient, tenant); err != nil {
+		if err := ensureTenantApplication(log.WithTenant(ctx, tenant.ID), dynamicClient, tenant); err != nil {
 			return err
 		}
 	}
@@ -131,6 +132,7 @@ func ensureTenantNamespace(ctx context.Context, client kubernetes.Interface, ten
 				Name: getTenantNamespaceName(tenant),
 				Labels: map[string]string{
 					"is-tenant":                     "true",
+					"tenant":                        tenant.ID,
 					"argocd.argoproj.io/managed-by": "openshift-gitops",
 				},
 			},
@@ -144,6 +146,8 @@ func ensureTenantNamespace(ctx context.Context, client kubernetes.Interface, ten
 }
 
 func deleteTenant(ctx context.Context, client kubernetes.Interface, dynamicClient dynamic.Interface, tenant tenant) error {
+	l := log.FromContext(ctx)
+	l.Info("Deleting tenant")
 	if err := deleteTenantApp(ctx, dynamicClient, tenant); err != nil {
 		return err
 	}
@@ -239,7 +243,7 @@ func ensureTenantApplication(ctx context.Context, client dynamic.Interface, tena
 }
 
 func getTenantNamespaceName(tenant tenant) string {
-	return fmt.Sprintf("acs-%s", tenant.ID)
+	return fmt.Sprintf("%s%s", namespacePrefix, tenant.ID)
 }
 
 func makeTenantApplication(tenant tenant) *unstructured.Unstructured {
@@ -275,7 +279,7 @@ func makeTenantApplication(tenant tenant) *unstructured.Unstructured {
 		"source":  source,
 		"destination": map[string]interface{}{
 			"server":    "https://kubernetes.default.svc",
-			"namespace": fmt.Sprintf("tenant-%s", tenant.ID),
+			"namespace": getTenantNamespaceName(tenant),
 		},
 		"syncPolicy": map[string]interface{}{
 			"automated": map[string]interface{}{
@@ -299,7 +303,7 @@ func getExisting(ctx context.Context, client kubernetes.Interface) ([]tenant, er
 	var tenants []tenant
 	for _, ns := range namespaces.Items {
 		tenants = append(tenants, tenant{
-			ID: ns.Name[len("tenant-"):],
+			ID: ns.Name[len(namespacePrefix):],
 		})
 	}
 
