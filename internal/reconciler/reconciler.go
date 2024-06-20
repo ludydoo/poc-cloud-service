@@ -328,6 +328,9 @@ func makeTenantApplication(tenant *v1.Tenant) (*unstructured.Unstructured, error
 	if path := tenant.GetSource().GetPath(); len(path) > 0 {
 		source["path"] = path
 	}
+	if targetRevision := tenant.GetSource().GetTargetRevision(); len(targetRevision) > 0 {
+		source["targetRevision"] = targetRevision
+	}
 
 	helm := map[string]interface{}{
 		"releaseName": getTenantNamespaceName(tenant.GetId()),
