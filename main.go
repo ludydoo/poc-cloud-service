@@ -255,13 +255,21 @@ func makeTenantApplication(tenant tenant) *unstructured.Unstructured {
 		Kind:    "Application",
 	})
 
+	const defaultRepoURL = "https://github.com/ludydoo/poc-cloud-service-manifests"
+
 	source := map[string]interface{}{
-		"repoURL": "https://github.com/ludydoo/poc-cloud-service-manifests",
+		"repoURL": defaultRepoURL,
 		"path":    "tenant-manifests",
 	}
+
 	if len(tenant.Source) > 0 {
 		source = tenant.Source
 	}
+
+	if _, ok := source["repoURL"].(string); !ok {
+		source["repoURL"] = defaultRepoURL
+	}
+
 	u.Object["spec"] = map[string]interface{}{
 		"project": "default",
 		"source":  source,
