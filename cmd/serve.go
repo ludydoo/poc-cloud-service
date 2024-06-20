@@ -149,5 +149,5 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.PersistentFlags().StringVar(&grpcAddr, "grpc-addr", ":8080", "gRPC address")
 	serveCmd.PersistentFlags().StringVar(&httpAddr, "http-addr", ":8081", "HTTP address")
-	serveCmd.PersistentFlags().StringVar(&dsn, "dsn", "postgresql://cloud-service:cloud-service@localhost:15432/postgres?sslmode=disable", "PostgreSQL DSN")
+	serveCmd.PersistentFlags().StringVar(&dsn, "dsn", "", "PostgreSQL DSN")
 }
