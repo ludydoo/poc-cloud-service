@@ -16,6 +16,7 @@ import (
 	"poc-cloud-service/internal/store"
 	"poc-cloud-service/log"
 	"reflect"
+	"sigs.k8s.io/yaml"
 	"time"
 )
 
@@ -85,17 +86,17 @@ func (r *Reconciler) reconcileTenants(ctx context.Context) error {
 	// Want is the desired state
 	want, err := r.getWant(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get desired state: %w", err)
 	}
 
 	// Create/Update tenants
 	for _, tenant := range want {
 		tenantCtx := log.WithTenant(ctx, tenant.GetId())
 		if err := r.ensureTenantNamespace(tenantCtx, tenant); err != nil {
-			return err
+			return fmt.Errorf("failed to ensure tenant namespace: %w", err)
 		}
 		if err := r.ensureTenantApplication(tenantCtx, tenant); err != nil {
-			return err
+			return fmt.Errorf("failed to ensure tenant application: %w", err)
 		}
 	}
 
@@ -214,15 +215,18 @@ func deleteTenantNamespace(ctx context.Context, client kubernetes.Interface, ten
 func (r *Reconciler) ensureTenantApplication(ctx context.Context, tenant *v1.Tenant) error {
 	l := log.FromContext(ctx)
 	apps := r.dynamicClient.Resource(applicationsGVR)
-	want := makeTenantApplication(tenant)
+	want, err := makeTenantApplication(tenant)
+	if err != nil {
+		return fmt.Errorf("failed to build desired application: %w", err)
+	}
 	got, err := apps.Namespace(openshiftGitopsNamespace).Get(ctx, getTenantNamespaceName(tenant.GetId()), metav1.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			return err
+			return fmt.Errorf("failed to get application: %w", err)
 		}
 		l.Info("Creating application")
 		if _, err := apps.Namespace(openshiftGitopsNamespace).Create(ctx, want, metav1.CreateOptions{}); err != nil {
-			return err
+			return fmt.Errorf("failed to create application: %w", err)
 		}
 		return nil
 	}
@@ -237,7 +241,7 @@ func (r *Reconciler) ensureTenantApplication(ctx context.Context, tenant *v1.Ten
 	l.Info("Updating application")
 	got.Object["spec"] = wantSpec
 	if _, err := apps.Namespace(openshiftGitopsNamespace).Update(ctx, got, metav1.UpdateOptions{}); err != nil {
-		return err
+		return fmt.Errorf("failed to update application: %w", err)
 	}
 
 	return nil
@@ -268,8 +272,9 @@ func (r *Reconciler) ensureTenantNamespace(ctx context.Context, tenant *v1.Tenan
 				Labels: wantLabels,
 			},
 		}, metav1.CreateOptions{}); err != nil {
-			return err
+			return fmt.Errorf("failed to create namespace: %w", err)
 		}
+		return nil
 	}
 
 	shouldUpdate := false
@@ -288,7 +293,7 @@ func (r *Reconciler) ensureTenantNamespace(ctx context.Context, tenant *v1.Tenan
 	if shouldUpdate {
 		l.Info("Updating namespace", zap.String("name", namespaceName))
 		if _, err := r.client.CoreV1().Namespaces().Update(ctx, got, metav1.UpdateOptions{}); err != nil {
-			return err
+			return fmt.Errorf("failed to update namespace: %w", err)
 		}
 	}
 
@@ -302,7 +307,7 @@ func getTenantNamespaceName(tenantID string) string {
 }
 
 // makeTenantApplication creates an ArgoCD Application object for a tenant
-func makeTenantApplication(tenant *v1.Tenant) *unstructured.Unstructured {
+func makeTenantApplication(tenant *v1.Tenant) (*unstructured.Unstructured, error) {
 	u := &unstructured.Unstructured{}
 	u.SetNamespace(openshiftGitopsNamespace)
 	u.SetName(getTenantNamespaceName(tenant.GetId()))
@@ -329,7 +334,11 @@ func makeTenantApplication(tenant *v1.Tenant) *unstructured.Unstructured {
 	}
 
 	if values := tenant.GetSource().GetHelm().GetValues().AsMap(); len(values) > 0 {
-		helm["values"] = values
+		yamlBytes, err := yaml.Marshal(values)
+		if err != nil {
+			return nil, err
+		}
+		helm["values"] = string(yamlBytes)
 	}
 
 	source["helm"] = helm
@@ -349,7 +358,7 @@ func makeTenantApplication(tenant *v1.Tenant) *unstructured.Unstructured {
 		},
 	}
 
-	return u
+	return u, nil
 }
 
 // getExistingTenantIDs returns a list of existing tenants ids

@@ -1,34 +1,107 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { Avatar } from '@/components/avatar'
+import {
+  Dropdown,
+  DropdownButton,
+  DropdownDivider,
+  DropdownItem,
+  DropdownLabel,
+  DropdownMenu,
+} from '@/components/dropdown'
+import {
+  Navbar,
+  NavbarItem,
+  NavbarSection,
+  NavbarSpacer,
+} from '@/components/navbar'
+import {
+  Sidebar,
+  SidebarBody,
+  SidebarItem,
+  SidebarLabel,
+  SidebarSection,
+  SidebarSpacer,
+} from '@/components/sidebar'
+import { SidebarLayout } from '@/components/sidebar-layout'
+import {
+  ArrowRightStartOnRectangleIcon,
+  Cog8ToothIcon,
+  LightBulbIcon,
+  ShieldCheckIcon,
+  UserIcon,
+} from '@heroicons/react/16/solid'
+import {
+  HomeIcon,
+  InboxIcon,
+  MagnifyingGlassIcon,
+} from '@heroicons/react/20/solid'
+import { BuildingOfficeIcon } from '@heroicons/react/24/solid'
+import { Outlet } from 'react-router-dom'
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <SidebarLayout
+      navbar={
+        <Navbar>
+          <NavbarSpacer />
+          <NavbarSection>
+            <NavbarItem to="/search" aria-label="Search">
+              <MagnifyingGlassIcon />
+            </NavbarItem>
+            <NavbarItem to="/inbox" aria-label="Inbox">
+              <InboxIcon />
+            </NavbarItem>
+            <Dropdown>
+              <DropdownButton as={NavbarItem}>
+                <Avatar src="/profile-photo.jpg" square />
+              </DropdownButton>
+              <DropdownMenu className="min-w-64" anchor="bottom end">
+                <DropdownItem to="/my-profile">
+                  <UserIcon />
+                  <DropdownLabel>My profile</DropdownLabel>
+                </DropdownItem>
+                <DropdownItem to="/settings">
+                  <Cog8ToothIcon />
+                  <DropdownLabel>Settings</DropdownLabel>
+                </DropdownItem>
+                <DropdownDivider />
+                <DropdownItem to="/privacy-policy">
+                  <ShieldCheckIcon />
+                  <DropdownLabel>Privacy policy</DropdownLabel>
+                </DropdownItem>
+                <DropdownItem to="/share-feedback">
+                  <LightBulbIcon />
+                  <DropdownLabel>Share feedback</DropdownLabel>
+                </DropdownItem>
+                <DropdownDivider />
+                <DropdownItem to="/logout">
+                  <ArrowRightStartOnRectangleIcon />
+                  <DropdownLabel>Sign out</DropdownLabel>
+                </DropdownItem>
+              </DropdownMenu>
+            </Dropdown>
+          </NavbarSection>
+        </Navbar>
+      }
+      sidebar={
+        <Sidebar>
+          <SidebarBody>
+            <SidebarSection>
+              <SidebarItem to="/">
+                <HomeIcon />
+                <SidebarLabel>Home</SidebarLabel>
+              </SidebarItem>
+              <SidebarItem to="/tenants">
+                <BuildingOfficeIcon />
+                <SidebarLabel>Tenants</SidebarLabel>
+              </SidebarItem>
+            </SidebarSection>
+            <SidebarSpacer />
+          </SidebarBody>
+        </Sidebar>
+      }
+    >
+      <Outlet />
+    </SidebarLayout>
   )
 }
 

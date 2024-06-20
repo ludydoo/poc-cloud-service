@@ -4,6 +4,8 @@ import (
 	"context"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/cors"
+	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -20,8 +22,6 @@ import (
 	"poc-cloud-service/internal/server"
 	"poc-cloud-service/internal/store"
 	"poc-cloud-service/log"
-
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -141,12 +141,14 @@ var serveCmd = &cobra.Command{
 		uiFS := http.Dir("ui/dist")
 
 		httpMux := http.NewServeMux()
-		httpMux.Handle("/v1", mux)
+		httpMux.Handle("/v1/", mux)
 		httpMux.Handle("/", http.FileServer(uiFS))
+
+		handler := cors.AllowAll().Handler(httpMux)
 
 		gwServer := &http.Server{
 			Addr:    httpAddr,
-			Handler: httpMux,
+			Handler: handler,
 		}
 
 		logger.Info("starting server", zap.String("address", ":8081"))
