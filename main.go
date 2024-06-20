@@ -154,15 +154,19 @@ func deleteTenant(ctx context.Context, client kubernetes.Interface, dynamicClien
 
 func deleteTenantApp(ctx context.Context, dynamicClient dynamic.Interface, tenant tenant) error {
 
+	l := log.FromContext(ctx)
+
 	got, err := dynamicClient.Resource(applicationsGVR).Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
+			l.Info("Application already deleted", zap.String("name", getTenantNamespaceName(tenant)))
 			return nil
 		}
 		return err
 	}
 
 	if got.GetDeletionTimestamp() == nil {
+		l.Info("Deleting application", zap.String("name", getTenantNamespaceName(tenant)))
 		err = dynamicClient.Resource(applicationsGVR).Namespace("openshift-gitops").Delete(ctx, getTenantNamespaceName(tenant), metav1.DeleteOptions{})
 		if !errors.IsNotFound(err) {
 			return err
@@ -183,6 +187,7 @@ func deleteTenantApp(ctx context.Context, dynamicClient dynamic.Interface, tenan
 			got, err = dynamicClient.Resource(applicationsGVR).Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
 			if err != nil {
 				if errors.IsNotFound(err) {
+					l.Info("Application deleted", zap.String("name", getTenantNamespaceName(tenant)))
 					return nil
 				}
 				return err
