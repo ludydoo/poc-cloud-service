@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	v1 "poc-cloud-service/gen/api/v1"
 	"poc-cloud-service/internal/reconciler"
 	"poc-cloud-service/internal/server"
@@ -79,7 +80,6 @@ var serveCmd = &cobra.Command{
 			return err
 		}
 
-
 		pool, err := pgxpool.New(ctx, dsn)
 		if err != nil {
 			return err
@@ -139,11 +139,11 @@ var serveCmd = &cobra.Command{
 			return err
 		}
 
-		uiFS := http.Dir("ui/dist")
+		spa := spaHandler{staticPath: "ui/dist", indexPath: "index.html"}
 
 		httpMux := http.NewServeMux()
 		httpMux.Handle("/v1/", mux)
-		httpMux.Handle("/", http.FileServer(uiFS))
+		httpMux.Handle("/", spa)
 
 		handler := cors.AllowAll().Handler(httpMux)
 
@@ -166,4 +166,36 @@ func init() {
 	serveCmd.PersistentFlags().StringVar(&grpcAddr, "grpc-addr", ":8080", "gRPC address")
 	serveCmd.PersistentFlags().StringVar(&httpAddr, "http-addr", ":8081", "HTTP address")
 	serveCmd.PersistentFlags().StringVar(&dsn, "dsn", "", "PostgreSQL DSN")
+}
+
+type spaHandler struct {
+	staticPath string
+	indexPath  string
+}
+
+// ServeHTTP inspects the URL path to locate a file within the static dir
+// on the SPA handler. If a file is found, it will be served. If not, the
+// file located at the index path on the SPA handler will be served. This
+// is suitable behavior for serving an SPA (single page application).
+func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Join internally call path.Clean to prevent directory traversal
+	p := filepath.Join(h.staticPath, r.URL.Path)
+
+	// check whether a file exists or is a directory at the given path
+	fi, err := os.Stat(p)
+	if os.IsNotExist(err) || fi.IsDir() {
+		// file does not exist or path is a directory, serve index.html
+		http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
+		return
+	}
+
+	if err != nil {
+		// if we got an error (that wasn't that the file doesn't exist) stating the
+		// file, return a 500 internal server error and stop
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// otherwise, use http.FileServer to serve the static file
+	http.FileServer(http.Dir(h.staticPath)).ServeHTTP(w, r)
 }
