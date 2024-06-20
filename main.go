@@ -80,8 +80,18 @@ func reconcileTenants(ctx context.Context, client *kubernetes.Clientset, dynamic
 		return err
 	}
 
+	// Create/Update tenants
+	for _, tenant := range want {
+		if err := ensureTenantNamespace(log.WithTenant(ctx, tenant.ID), client, tenant); err != nil {
+			return err
+		}
+		if err := ensureTenantApplication(log.WithTenant(ctx, tenant.ID), dynamicClient, tenant); err != nil {
+			return err
+		}
+	}
+
 	// Existing is the current state
-	existing, err := getExisting(ctx, client)
+	existing, err := getExistingTenantIDs(ctx, client)
 	if err != nil {
 		return err
 	}
@@ -101,16 +111,6 @@ func reconcileTenants(ctx context.Context, client *kubernetes.Clientset, dynamic
 		}
 	}
 
-	// Create/Update tenants
-	for _, tenant := range want {
-		if err := ensureTenantNamespace(log.WithTenant(ctx, tenant.ID), client, tenant); err != nil {
-			return err
-		}
-		if err := ensureTenantApplication(log.WithTenant(ctx, tenant.ID), dynamicClient, tenant); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -119,6 +119,7 @@ type tenant struct {
 	Source map[string]interface{} `json:"source"`
 }
 
+// getNamespaceTenant extracts the tenant ID from a namespace object
 func getNamespaceTenant(namespace v1.Namespace) (string, error) {
 	if namespace.Labels == nil {
 		return "", fmt.Errorf("no labels")
@@ -133,6 +134,108 @@ func getNamespaceTenant(namespace v1.Namespace) (string, error) {
 	return tenant, nil
 }
 
+// deleteTenant deletes a tenant by deleting the namespace and the application
+func deleteTenant(ctx context.Context, client kubernetes.Interface, dynamicClient dynamic.Interface, tenantID string) error {
+	l := log.FromContext(ctx)
+	l.Info("Deleting tenant")
+	if err := deleteTenantApp(ctx, dynamicClient, tenantID); err != nil {
+		return err
+	}
+	if err := deleteTenantNamespace(ctx, client, tenantID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// deleteTenantApp deletes the tenant application
+func deleteTenantApp(ctx context.Context, dynamicClient dynamic.Interface, tenant string) error {
+
+	l := log.FromContext(ctx)
+
+	got, err := dynamicClient.Resource(applicationsGVR).Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			l.Info("Application already deleted", zap.String("name", getTenantNamespaceName(tenant)))
+			return nil
+		}
+		return err
+	}
+
+	if got.GetDeletionTimestamp() == nil {
+		l.Info("Deleting application", zap.String("name", getTenantNamespaceName(tenant)))
+		err = dynamicClient.Resource(applicationsGVR).Namespace("openshift-gitops").Delete(ctx, getTenantNamespaceName(tenant), metav1.DeleteOptions{})
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		return nil
+	}
+
+	// wait for deletion
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for deletion")
+		case <-ticker.C:
+			got, err = dynamicClient.Resource(applicationsGVR).Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
+			if err != nil {
+				if errors.IsNotFound(err) {
+					l.Info("Application deleted", zap.String("name", getTenantNamespaceName(tenant)))
+					return nil
+				}
+				return err
+			}
+		}
+	}
+}
+
+// deleteTenantNamespace deletes the tenant namespace
+func deleteTenantNamespace(ctx context.Context, client kubernetes.Interface, tenantID string) error {
+	err := client.CoreV1().Namespaces().Delete(ctx, getTenantNamespaceName(tenantID), metav1.DeleteOptions{})
+	if !errors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+// ensureTenantApplication ensures that the tenant application exists
+func ensureTenantApplication(ctx context.Context, client dynamic.Interface, tenant tenant) error {
+	l := log.FromContext(ctx)
+	apps := client.Resource(applicationsGVR)
+	want := makeTenantApplication(tenant)
+	got, err := apps.Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant.ID), metav1.GetOptions{})
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		l.Info("Creating application", zap.String("name", getTenantNamespaceName(tenant.ID)))
+		if _, err := apps.Namespace("openshift-gitops").Create(ctx, want, metav1.CreateOptions{}); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	gotSpec := got.Object["spec"]
+	wantSpec := want.Object["spec"]
+	if reflect.DeepEqual(gotSpec, wantSpec) {
+		return nil
+	}
+
+	// update
+	l.Info("Updating application", zap.String("name", getTenantNamespaceName(tenant.ID)))
+	got.Object["spec"] = wantSpec
+	if _, err := apps.Namespace("openshift-gitops").Update(ctx, got, metav1.UpdateOptions{}); err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+// ensureTenantNamespace ensures that a namespace exists with the correct labels
 func ensureTenantNamespace(ctx context.Context, client kubernetes.Interface, tenant tenant) error {
 	l := log.FromContext(ctx)
 
@@ -184,107 +287,12 @@ func ensureTenantNamespace(ctx context.Context, client kubernetes.Interface, ten
 
 }
 
-func deleteTenant(ctx context.Context, client kubernetes.Interface, dynamicClient dynamic.Interface, tenantID string) error {
-	l := log.FromContext(ctx)
-	l.Info("Deleting tenant")
-	if err := deleteTenantApp(ctx, dynamicClient, tenantID); err != nil {
-		return err
-	}
-	if err := deleteTenantNamespace(ctx, client, tenantID); err != nil {
-		return err
-	}
-	return nil
-}
-
-func deleteTenantApp(ctx context.Context, dynamicClient dynamic.Interface, tenant string) error {
-
-	l := log.FromContext(ctx)
-
-	got, err := dynamicClient.Resource(applicationsGVR).Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			l.Info("Application already deleted", zap.String("name", getTenantNamespaceName(tenant)))
-			return nil
-		}
-		return err
-	}
-
-	if got.GetDeletionTimestamp() == nil {
-		l.Info("Deleting application", zap.String("name", getTenantNamespaceName(tenant)))
-		err = dynamicClient.Resource(applicationsGVR).Namespace("openshift-gitops").Delete(ctx, getTenantNamespaceName(tenant), metav1.DeleteOptions{})
-		if !errors.IsNotFound(err) {
-			return err
-		}
-		return nil
-	}
-
-	// wait for deletion
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for deletion")
-		case <-ticker.C:
-			got, err = dynamicClient.Resource(applicationsGVR).Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
-			if err != nil {
-				if errors.IsNotFound(err) {
-					l.Info("Application deleted", zap.String("name", getTenantNamespaceName(tenant)))
-					return nil
-				}
-				return err
-			}
-		}
-	}
-}
-
-func deleteTenantNamespace(ctx context.Context, client kubernetes.Interface, tenantID string) error {
-	err := client.CoreV1().Namespaces().Delete(ctx, getTenantNamespaceName(tenantID), metav1.DeleteOptions{})
-	if !errors.IsNotFound(err) {
-		return err
-	}
-	return nil
-}
-
-func ensureTenantApplication(ctx context.Context, client dynamic.Interface, tenant tenant) error {
-	l := log.FromContext(ctx)
-	apps := client.Resource(applicationsGVR)
-	want := makeTenantApplication(tenant)
-	got, err := apps.Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant.ID), metav1.GetOptions{})
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-		l.Info("Creating application", zap.String("name", getTenantNamespaceName(tenant.ID)))
-		if _, err := apps.Namespace("openshift-gitops").Create(ctx, want, metav1.CreateOptions{}); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	gotSpec := got.Object["spec"]
-	wantSpec := want.Object["spec"]
-	if reflect.DeepEqual(gotSpec, wantSpec) {
-		return nil
-	}
-
-	// update
-	l.Info("Updating application", zap.String("name", getTenantNamespaceName(tenant.ID)))
-	got.Object["spec"] = wantSpec
-	if _, err := apps.Namespace("openshift-gitops").Update(ctx, got, metav1.UpdateOptions{}); err != nil {
-		return err
-	}
-
-	return nil
-
-}
-
+// getTenantNamespaceName returns the namespace name for a tenant
 func getTenantNamespaceName(tenantID string) string {
 	return fmt.Sprintf("%s%s", namespacePrefix, tenantID)
 }
 
+// makeTenantApplication creates an ArgoCD Application object for a tenant
 func makeTenantApplication(tenant tenant) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{}
 	u.SetNamespace("openshift-gitops")
@@ -331,7 +339,8 @@ func makeTenantApplication(tenant tenant) *unstructured.Unstructured {
 	return u
 }
 
-func getExisting(ctx context.Context, client kubernetes.Interface) ([]string, error) {
+// getExistingTenantIDs returns a list of existing tenants ids
+func getExistingTenantIDs(ctx context.Context, client kubernetes.Interface) ([]string, error) {
 	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
 		LabelSelector: "is-tenant=true",
 	})
@@ -341,9 +350,9 @@ func getExisting(ctx context.Context, client kubernetes.Interface) ([]string, er
 
 	var tenants []string
 	for _, ns := range namespaces.Items {
-		tenantID, error := getNamespaceTenant(ns)
-		if error != nil {
-			return nil, error
+		tenantID, err := getNamespaceTenant(ns)
+		if err != nil {
+			return nil, err
 		}
 		tenants = append(tenants, tenantID)
 	}
@@ -351,6 +360,7 @@ func getExisting(ctx context.Context, client kubernetes.Interface) ([]string, er
 	return tenants, nil
 }
 
+// getWant reads the desired state from a file
 func getWant() ([]tenant, error) {
 	dataFile, err := os.ReadFile("/data/tenants")
 	if err != nil {
