@@ -329,6 +329,11 @@ func makeTenantApplication(tenant Tenant) *unstructured.Unstructured {
 		source["repoURL"] = defaultRepoURL
 	}
 
+	if source["helm"] == nil {
+		source["helm"] = map[string]interface{}{}
+	}
+	source["helm"].(map[string]interface{})["releaseName"] = getTenantNamespaceName(tenant.ID)
+
 	u.Object["spec"] = map[string]interface{}{
 		"project": "default",
 		"source":  source,
