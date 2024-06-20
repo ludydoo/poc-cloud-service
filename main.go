@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/rest"
 	"os"
 	"poc-cloud-service/log"
+	"reflect"
 	"time"
 )
 
@@ -101,7 +102,6 @@ func reconcileTenants(ctx context.Context, client *kubernetes.Clientset, dynamic
 
 	// Create/Update tenants
 	for _, tenant := range want {
-		l.Info("Upserting tenant", zap.String("id", tenant.ID))
 		if err := ensureTenantNamespace(ctx, client, tenant); err != nil {
 			return err
 		}
@@ -118,11 +118,13 @@ type tenant struct {
 }
 
 func ensureTenantNamespace(ctx context.Context, client kubernetes.Interface, tenant tenant) error {
+	l := log.FromContext(ctx)
 	_, err := client.CoreV1().Namespaces().Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return err
 		}
+		l.Info("Creating namespace", zap.String("name", getTenantNamespaceName(tenant)))
 		if _, err := client.CoreV1().Namespaces().Create(ctx, &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: getTenantNamespaceName(tenant),
@@ -170,22 +172,30 @@ func deleteTenantNamespace(ctx context.Context, client kubernetes.Interface, ten
 }
 
 func ensureTenantApplication(ctx context.Context, client dynamic.Interface, tenant tenant) error {
+	l := log.FromContext(ctx)
 	apps := client.Resource(applicationsGVR)
-
 	want := makeTenantApplication(tenant)
 	got, err := apps.Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return err
 		}
+		l.Info("Creating application", zap.String("name", getTenantNamespaceName(tenant)))
 		if _, err := apps.Namespace("openshift-gitops").Create(ctx, want, metav1.CreateOptions{}); err != nil {
 			return err
 		}
 		return nil
 	}
 
+	gotSpec := got.Object["spec"]
+	wantSpec := want.Object["spec"]
+	if reflect.DeepEqual(gotSpec, wantSpec) {
+		return nil
+	}
+
 	// update
-	got.Object["spec"] = want.Object["spec"]
+	l.Info("Updating application", zap.String("name", getTenantNamespaceName(tenant)))
+	got.Object["spec"] = wantSpec
 	if _, err := apps.Namespace("openshift-gitops").Update(ctx, got, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
