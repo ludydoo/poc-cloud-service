@@ -138,9 +138,15 @@ var serveCmd = &cobra.Command{
 			return err
 		}
 
+		uiFS := http.Dir("ui/dist")
+
+		httpMux := http.NewServeMux()
+		httpMux.Handle("/v1", mux)
+		httpMux.Handle("/", http.FileServer(uiFS))
+
 		gwServer := &http.Server{
 			Addr:    httpAddr,
-			Handler: mux,
+			Handler: httpMux,
 		}
 
 		logger.Info("starting server", zap.String("address", ":8081"))
