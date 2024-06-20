@@ -4,15 +4,16 @@ import (
 	"context"
 	"fmt"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"os"
+	v1 "poc-cloud-service/gen/api/v1"
+	"poc-cloud-service/internal/convert"
+	"poc-cloud-service/internal/store"
 	"poc-cloud-service/log"
 	"reflect"
 	"time"
@@ -44,12 +45,14 @@ const (
 type Reconciler struct {
 	client        kubernetes.Interface
 	dynamicClient dynamic.Interface
+	store         *store.Queries
 }
 
-func NewReconciler(client kubernetes.Interface, dynamicClient dynamic.Interface) *Reconciler {
+func NewReconciler(client kubernetes.Interface, dynamicClient dynamic.Interface, store *store.Queries) *Reconciler {
 	return &Reconciler{
 		client:        client,
 		dynamicClient: dynamicClient,
+		store:         store,
 	}
 }
 
@@ -80,17 +83,18 @@ func (r *Reconciler) Start(ctx context.Context) {
 func (r *Reconciler) reconcileTenants(ctx context.Context) error {
 
 	// Want is the desired state
-	want, err := getWant()
+	want, err := r.getWant(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Create/Update tenants
 	for _, tenant := range want {
-		if err := r.ensureTenantNamespace(log.WithTenant(ctx, tenant.ID), tenant); err != nil {
+		tenantCtx := log.WithTenant(ctx, tenant.GetId())
+		if err := r.ensureTenantNamespace(tenantCtx, tenant); err != nil {
 			return err
 		}
-		if err := r.ensureTenantApplication(log.WithTenant(ctx, tenant.ID), tenant); err != nil {
+		if err := r.ensureTenantApplication(tenantCtx, tenant); err != nil {
 			return err
 		}
 	}
@@ -106,7 +110,7 @@ func (r *Reconciler) reconcileTenants(ctx context.Context) error {
 		toDelete[tenantID] = tenantID
 	}
 	for _, tenant := range want {
-		delete(toDelete, tenant.ID)
+		delete(toDelete, tenant.GetId())
 	}
 
 	// Delete tenants that are not in the desired state
@@ -125,7 +129,7 @@ type Tenant struct {
 }
 
 // getNamespaceTenant extracts the tenant ID from a namespace object
-func getNamespaceTenant(namespace v1.Namespace) (string, error) {
+func getNamespaceTenant(namespace corev1.Namespace) (string, error) {
 	if namespace.Labels == nil {
 		return "", fmt.Errorf("no labels")
 	}
@@ -207,11 +211,11 @@ func deleteTenantNamespace(ctx context.Context, client kubernetes.Interface, ten
 }
 
 // ensureTenantApplication ensures that the tenant application exists
-func (r *Reconciler) ensureTenantApplication(ctx context.Context, tenant Tenant) error {
+func (r *Reconciler) ensureTenantApplication(ctx context.Context, tenant *v1.Tenant) error {
 	l := log.FromContext(ctx)
 	apps := r.dynamicClient.Resource(applicationsGVR)
 	want := makeTenantApplication(tenant)
-	got, err := apps.Namespace(openshiftGitopsNamespace).Get(ctx, getTenantNamespaceName(tenant.ID), metav1.GetOptions{})
+	got, err := apps.Namespace(openshiftGitopsNamespace).Get(ctx, getTenantNamespaceName(tenant.GetId()), metav1.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return err
@@ -241,16 +245,16 @@ func (r *Reconciler) ensureTenantApplication(ctx context.Context, tenant Tenant)
 }
 
 // ensureTenantNamespace ensures that a namespace exists with the correct labels
-func (r *Reconciler) ensureTenantNamespace(ctx context.Context, tenant Tenant) error {
+func (r *Reconciler) ensureTenantNamespace(ctx context.Context, tenant *v1.Tenant) error {
 	l := log.FromContext(ctx)
 
 	wantLabels := map[string]string{
 		isTenantLabel:   "true",
-		tenantLabel:     tenant.ID,
+		tenantLabel:     tenant.GetId(),
 		argoCdManagedBy: managedByOpenshiftGitops,
 	}
 
-	namespaceName := getTenantNamespaceName(tenant.ID)
+	namespaceName := getTenantNamespaceName(tenant.GetId())
 
 	got, err := r.client.CoreV1().Namespaces().Get(ctx, namespaceName, metav1.GetOptions{})
 	if err != nil {
@@ -258,7 +262,7 @@ func (r *Reconciler) ensureTenantNamespace(ctx context.Context, tenant Tenant) e
 			return err
 		}
 		l.Info("Creating namespace", zap.String("name", namespaceName))
-		if _, err := r.client.CoreV1().Namespaces().Create(ctx, &v1.Namespace{
+		if _, err := r.client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   namespaceName,
 				Labels: wantLabels,
@@ -298,13 +302,13 @@ func getTenantNamespaceName(tenantID string) string {
 }
 
 // makeTenantApplication creates an ArgoCD Application object for a tenant
-func makeTenantApplication(tenant Tenant) *unstructured.Unstructured {
+func makeTenantApplication(tenant *v1.Tenant) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{}
 	u.SetNamespace(openshiftGitopsNamespace)
-	u.SetName(getTenantNamespaceName(tenant.ID))
+	u.SetName(getTenantNamespaceName(tenant.GetId()))
 	u.SetLabels(map[string]string{
 		isTenantLabel: "true",
-		tenantLabel:   tenant.ID,
+		tenantLabel:   tenant.GetId(),
 	})
 	u.SetGroupVersionKind(applicationGVK)
 
@@ -313,25 +317,29 @@ func makeTenantApplication(tenant Tenant) *unstructured.Unstructured {
 		"path":    defaultRepoPath,
 	}
 
-	if len(tenant.Source) > 0 {
-		source = tenant.Source
+	if repoURL := tenant.GetSource().GetRepoUrl(); len(repoURL) > 0 {
+		source["repoURL"] = repoURL
+	}
+	if path := tenant.GetSource().GetPath(); len(path) > 0 {
+		source["path"] = path
 	}
 
-	if _, ok := source["repoURL"].(string); !ok {
-		source["repoURL"] = defaultRepoURL
+	helm := map[string]interface{}{
+		"releaseName": getTenantNamespaceName(tenant.GetId()),
 	}
 
-	if source["helm"] == nil {
-		source["helm"] = map[string]interface{}{}
+	if values := tenant.GetSource().GetHelm().GetValues().AsMap(); len(values) > 0 {
+		helm["values"] = values
 	}
-	source["helm"].(map[string]interface{})["releaseName"] = getTenantNamespaceName(tenant.ID)
+
+	source["helm"] = helm
 
 	u.Object["spec"] = map[string]interface{}{
 		"project": "default",
 		"source":  source,
 		"destination": map[string]interface{}{
 			"server":    "https://kubernetes.default.svc",
-			"namespace": getTenantNamespaceName(tenant.ID),
+			"namespace": getTenantNamespaceName(tenant.GetId()),
 		},
 		"syncPolicy": map[string]interface{}{
 			"automated": map[string]interface{}{
@@ -366,17 +374,15 @@ func (r *Reconciler) getExistingTenantIDs(ctx context.Context) ([]string, error)
 }
 
 // getWant reads the desired state from a file
-func getWant() ([]Tenant, error) {
-	dataFile, err := os.ReadFile("/data/tenants")
+func (r *Reconciler) getWant(ctx context.Context) ([]*v1.Tenant, error) {
+
+	storedTenants, err := r.store.ListTenants(ctx)
 	if err != nil {
-		fmt.Printf("Error: %v", err)
 		return nil, err
 	}
 
-	var tenants []Tenant
-	err = yaml.Unmarshal(dataFile, &tenants)
+	tenants, err := convert.TenantsFromStore(storedTenants)
 	if err != nil {
-		fmt.Printf("Error: %v", err)
 		return nil, err
 	}
 

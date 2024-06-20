@@ -3,19 +3,23 @@ package cmd
 import (
 	"context"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"net"
 	"net/http"
 	"os"
+	"path"
 	v1 "poc-cloud-service/gen/api/v1"
+	"poc-cloud-service/internal/reconciler"
+	"poc-cloud-service/internal/server"
+	"poc-cloud-service/internal/store"
 	"poc-cloud-service/log"
-	"poc-cloud-service/pkg/reconciler"
-	"poc-cloud-service/pkg/server"
 
 	"github.com/spf13/cobra"
 )
@@ -23,6 +27,7 @@ import (
 var (
 	grpcAddr string
 	httpAddr string
+	dsn      string
 )
 
 // serveCmd represents the serve command
@@ -42,23 +47,45 @@ var serveCmd = &cobra.Command{
 
 		config, err := rest.InClusterConfig()
 		if err != nil {
-			panic(err)
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			kubeConfigPath := path.Join(home, ".kube", "config")
+			config, err = clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+			if err != nil {
+				logger.Error("failed to create config", zap.Error(err))
+				return err
+			}
 		}
 
 		client, err := kubernetes.NewForConfig(config)
 		if err != nil {
-			panic(err)
+			return err
 		}
+
+		if err := store.Migrate(ctx, dsn); err != nil {
+			return err
+		}
+
+		dbConn, err := pgx.Connect(ctx, dsn)
+		if err != nil {
+			return err
+		}
+
+		storeObj := store.New(dbConn)
 
 		dynamicClient, err := dynamic.NewForConfig(config)
 		if err != nil {
-			panic(err)
+			return err
 		}
 
-		r := reconciler.NewReconciler(client, dynamicClient)
-		r.Start(ctx)
+		r := reconciler.NewReconciler(client, dynamicClient, storeObj)
+		go func() {
+			r.Start(ctx)
+		}()
 
-		srv := server.NewServer(client)
+		srv := server.NewServer(client, storeObj)
 
 		listener, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
@@ -118,4 +145,5 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.PersistentFlags().StringVar(&grpcAddr, "grpc-addr", ":8080", "gRPC address")
 	serveCmd.PersistentFlags().StringVar(&httpAddr, "http-addr", ":8081", "HTTP address")
+	serveCmd.PersistentFlags().StringVar(&dsn, "dsn", "postgresql://cloud-service:cloud-service@localhost:15432/postgres?sslmode=disable", "PostgreSQL DSN")
 }

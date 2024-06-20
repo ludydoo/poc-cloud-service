@@ -55,7 +55,9 @@ message DeleteTenantRequest {
   string id = 1;
 }
 
-message DeleteTenantResponse {}
+message DeleteTenantResponse {
+  Tenant tenant = 1;
+}
 
 service TenantService {
   rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse){
