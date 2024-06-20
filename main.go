@@ -121,7 +121,14 @@ type tenant struct {
 
 func ensureTenantNamespace(ctx context.Context, client kubernetes.Interface, tenant tenant) error {
 	l := log.FromContext(ctx)
-	_, err := client.CoreV1().Namespaces().Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
+
+	wantLabels := map[string]string{
+		"is-tenant":                     "true",
+		"tenant":                        tenant.ID,
+		"argocd.argoproj.io/managed-by": "openshift-gitops",
+	}
+
+	got, err := client.CoreV1().Namespaces().Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return err
@@ -129,14 +136,30 @@ func ensureTenantNamespace(ctx context.Context, client kubernetes.Interface, ten
 		l.Info("Creating namespace", zap.String("name", getTenantNamespaceName(tenant)))
 		if _, err := client.CoreV1().Namespaces().Create(ctx, &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: getTenantNamespaceName(tenant),
-				Labels: map[string]string{
-					"is-tenant":                     "true",
-					"tenant":                        tenant.ID,
-					"argocd.argoproj.io/managed-by": "openshift-gitops",
-				},
+				Name:   getTenantNamespaceName(tenant),
+				Labels: wantLabels,
 			},
 		}, metav1.CreateOptions{}); err != nil {
+			return err
+		}
+	}
+
+	shouldUpdate := false
+
+	if got.Labels == nil {
+		shouldUpdate = true
+		got.Labels = map[string]string{}
+	}
+	for k, v := range wantLabels {
+		if got.Labels[k] != v {
+			shouldUpdate = true
+			got.Labels[k] = v
+		}
+	}
+
+	if shouldUpdate {
+		l.Info("Updating namespace", zap.String("name", getTenantNamespaceName(tenant)))
+		if _, err := client.CoreV1().Namespaces().Update(ctx, got, metav1.UpdateOptions{}); err != nil {
 			return err
 		}
 	}
