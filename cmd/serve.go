@@ -3,7 +3,7 @@ package cmd
 import (
 	"context"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/cors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -79,12 +79,13 @@ var serveCmd = &cobra.Command{
 			return err
 		}
 
-		dbConn, err := pgx.Connect(ctx, dsn)
+
+		pool, err := pgxpool.New(ctx, dsn)
 		if err != nil {
 			return err
 		}
 
-		storeObj := store.New(dbConn)
+		storeObj := store.New(pool)
 
 		dynamicClient, err := dynamic.NewForConfig(config)
 		if err != nil {

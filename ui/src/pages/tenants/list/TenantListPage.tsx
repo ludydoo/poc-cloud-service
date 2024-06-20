@@ -14,7 +14,7 @@ export default function TenantListPage() {
   const { data, isLoading, isError } = useTenants()
 
   return (
-    <>
+    <div className="mx-auto max-w-3xl">
       <div className="flex flex-row items-center justify-between">
         <Heading>Tenants</Heading>
         <Button to="/tenants/create" color="dark/zinc">
@@ -51,6 +51,6 @@ export default function TenantListPage() {
           )}
         </TableBody>
       </Table>
-    </>
+    </div>
   )
 }

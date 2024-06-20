@@ -11,6 +11,8 @@ import { defaultPath, defaultRepositoryURL } from '@/pages/tenants/constants.ts'
 import clsx from 'clsx'
 import { Button } from '@/components/button.tsx'
 import { stringify } from 'yaml'
+import { TextLink } from '@/components/text.tsx'
+import { ChevronRightIcon } from '@heroicons/react/24/outline'
 
 function TenantPath({ tenant }: { tenant: Tenant }) {
   const hasPath = !!tenant.source?.path
@@ -48,9 +50,16 @@ export default function TenantDetailsPage() {
   }
   const { data, isLoading, isError } = useTenant(id)
   return (
-    <>
+    <div className="mx-auto max-w-3xl">
       <div className="flex flex-row items-center justify-between">
-        <Heading>Tenant</Heading>
+        <div className="flex flex-row items-center space-x-1">
+          <TextLink to="/tenants">
+            <Heading>Tenants</Heading>
+          </TextLink>
+          <ChevronRightIcon className="size-4" />
+          <Heading>{data ? data.tenant.id : ''} </Heading>
+        </div>
+
         <Button to={`/tenants/${id}/edit`} color="dark/zinc">
           Edit tenant
         </Button>
@@ -73,6 +82,6 @@ export default function TenantDetailsPage() {
           )}
         </DescriptionList>
       </div>
-    </>
+    </div>
   )
 }
