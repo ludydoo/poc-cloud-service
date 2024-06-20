@@ -239,7 +239,7 @@ func ensureTenantApplication(ctx context.Context, client dynamic.Interface, tena
 }
 
 func getTenantNamespaceName(tenant tenant) string {
-	return fmt.Sprintf("tenant-%s", tenant.ID)
+	return fmt.Sprintf("acs-%s", tenant.ID)
 }
 
 func makeTenantApplication(tenant tenant) *unstructured.Unstructured {
