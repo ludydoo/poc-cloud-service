@@ -7,7 +7,11 @@ import {
 import { useDeleteTenant, useTenant } from '@/api/queries.ts'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Tenant } from '@/api'
-import { defaultPath, defaultRepositoryURL } from '@/pages/tenants/constants.ts'
+import {
+  defaultPath,
+  defaultRepositoryURL,
+  defaultTargetRevision,
+} from '@/pages/tenants/constants.ts'
 import clsx from 'clsx'
 import { Button } from '@/components/button.tsx'
 import { stringify } from 'yaml'
@@ -23,11 +27,11 @@ import {
 
 function TenantPath({ tenant }: { tenant: Tenant }) {
   const hasPath = !!tenant.source?.path
-  const path = tenant.source?.path || `${defaultPath} (default)`
+  const path = tenant.source?.path || `${defaultPath}`
   return (
     <>
       <DescriptionTerm>Path</DescriptionTerm>
-      <DescriptionDetails className={clsx(!hasPath && 'italic text-gray-400')}>
+      <DescriptionDetails className={clsx(!hasPath && 'text-gray-400')}>
         {path}
       </DescriptionDetails>
     </>
@@ -36,14 +40,25 @@ function TenantPath({ tenant }: { tenant: Tenant }) {
 
 function TenantRepoUrl({ tenant }: { tenant: Tenant }) {
   const hasRepoUrl = !!tenant.source?.repoUrl
-  const repoUrl = tenant.source?.repoUrl || `${defaultRepositoryURL} (default)`
+  const repoUrl = tenant.source?.repoUrl || `${defaultRepositoryURL}`
   return (
     <>
       <DescriptionTerm>Repository URL</DescriptionTerm>
-      <DescriptionDetails
-        className={clsx(!hasRepoUrl && 'italic text-gray-400')}
-      >
+      <DescriptionDetails className={clsx(!hasRepoUrl && 'text-gray-400')}>
         {repoUrl}
+      </DescriptionDetails>
+    </>
+  )
+}
+
+function TenantTargetRevision({ tenant }: { tenant: Tenant }) {
+  const hasValue = !!tenant.source?.targetRevision
+  const value = tenant.source?.targetRevision || `${defaultTargetRevision}`
+  return (
+    <>
+      <DescriptionTerm>Target Revision</DescriptionTerm>
+      <DescriptionDetails className={clsx(!hasValue && 'text-gray-400')}>
+        {value}
       </DescriptionDetails>
     </>
   )
@@ -88,6 +103,7 @@ export default function TenantDetailsPage() {
           <DescriptionDetails>{data && data.tenant.id}</DescriptionDetails>
           {data && <TenantRepoUrl tenant={data.tenant} />}
           {data && <TenantPath tenant={data.tenant} />}
+          {data && <TenantTargetRevision tenant={data.tenant} />}
           {data && (
             <>
               <DescriptionTerm>Helm values</DescriptionTerm>
