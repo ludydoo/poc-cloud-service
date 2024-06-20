@@ -153,14 +153,42 @@ func deleteTenant(ctx context.Context, client kubernetes.Interface, dynamicClien
 }
 
 func deleteTenantApp(ctx context.Context, dynamicClient dynamic.Interface, tenant tenant) error {
-	err := dynamicClient.
-		Resource(applicationsGVR).
-		Namespace("openshift-gitops").
-		Delete(ctx, getTenantNamespaceName(tenant), metav1.DeleteOptions{})
-	if !errors.IsNotFound(err) {
+
+	got, err := dynamicClient.Resource(applicationsGVR).Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		return err
 	}
-	return nil
+
+	if got.GetDeletionTimestamp() == nil {
+		err = dynamicClient.Resource(applicationsGVR).Namespace("openshift-gitops").Delete(ctx, getTenantNamespaceName(tenant), metav1.DeleteOptions{})
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		return nil
+	}
+
+	// wait for deletion
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for deletion")
+		case <-ticker.C:
+			got, err = dynamicClient.Resource(applicationsGVR).Namespace("openshift-gitops").Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
+			if err != nil {
+				if errors.IsNotFound(err) {
+					return nil
+				}
+				return err
+			}
+		}
+	}
 }
 
 func deleteTenantNamespace(ctx context.Context, client kubernetes.Interface, tenant tenant) error {
