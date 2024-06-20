@@ -114,9 +114,8 @@ func reconcileTenants(ctx context.Context, client *kubernetes.Clientset, dynamic
 }
 
 type tenant struct {
-	ID      string `json:"id"`
-	RepoURL string `json:"repoURL,omitempty"`
-	Path    string `json:"path,omitempty"`
+	ID     string                 `json:"id"`
+	Source map[string]interface{} `json:"source"`
 }
 
 func ensureTenantNamespace(ctx context.Context, client kubernetes.Interface, tenant tenant) error {
@@ -256,21 +255,16 @@ func makeTenantApplication(tenant tenant) *unstructured.Unstructured {
 		Kind:    "Application",
 	})
 
-	repoURL := "https://github.com/ludydoo/poc-cloud-service-manifests"
-	if len(tenant.RepoURL) > 0 {
-		repoURL = tenant.RepoURL
+	source := map[string]interface{}{
+		"repoURL": "https://github.com/ludydoo/poc-cloud-service-manifests",
+		"path":    "tenant-manifests",
 	}
-	path := "tenant-manifests"
-	if len(tenant.Path) > 0 {
-		path = tenant.Path
+	if len(tenant.Source) > 0 {
+		source = tenant.Source
 	}
-
 	u.Object["spec"] = map[string]interface{}{
 		"project": "default",
-		"source": map[string]interface{}{
-			"repoURL": repoURL,
-			"path":    path,
-		},
+		"source":  source,
 		"destination": map[string]interface{}{
 			"server":    "https://kubernetes.default.svc",
 			"namespace": fmt.Sprintf("tenant-%s", tenant.ID),
