@@ -64,6 +64,10 @@ var serveCmd = &cobra.Command{
 			return err
 		}
 
+		if len(dsn) == 0 {
+			dsn = os.Getenv("DB_DSN")
+		}
+
 		if err := store.Migrate(ctx, dsn); err != nil {
 			return err
 		}
