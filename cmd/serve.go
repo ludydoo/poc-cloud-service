@@ -30,6 +30,10 @@ var (
 	dsn      string
 )
 
+const (
+	defaultDsn = "postgresql://cloud-service:cloud-service@localhost:15432/postgres?sslmode=disable"
+)
+
 // serveCmd represents the serve command
 var serveCmd = &cobra.Command{
 	Use: "serve",
@@ -66,6 +70,9 @@ var serveCmd = &cobra.Command{
 
 		if len(dsn) == 0 {
 			dsn = os.Getenv("DB_DSN")
+		}
+		if len(dsn) == 0 {
+			dsn = defaultDsn
 		}
 
 		if err := store.Migrate(ctx, dsn); err != nil {
