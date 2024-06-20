@@ -76,6 +76,7 @@ func (q *Queries) GetTenantByID(ctx context.Context, id string) (Tenant, error) 
 
 const listTenants = `-- name: ListTenants :many
 select id, repo_url, path, values from tenants
+order by id
 `
 
 func (q *Queries) ListTenants(ctx context.Context) ([]Tenant, error) {

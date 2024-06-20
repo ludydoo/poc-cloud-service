@@ -61,4 +61,17 @@ export function useUpdateTenant() {
   })
 }
 
+export function useDeleteTenant() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      tenantServiceApi.tenantServiceDeleteTenant({ id }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: tenantQueries['list'].queryKey,
+      })
+    },
+  })
+}
+
 export { tenantQueries }

@@ -3,7 +3,8 @@ select * from tenants
 where id = $1;
 
 -- name: ListTenants :many
-select * from tenants;
+select * from tenants
+order by id;
 
 -- name: CreateTenant :one
 insert into tenants (id, repo_url, path, values)

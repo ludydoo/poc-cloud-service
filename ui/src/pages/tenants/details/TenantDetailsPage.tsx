@@ -4,8 +4,8 @@ import {
   DescriptionList,
   DescriptionTerm,
 } from '@/components/description-list.tsx'
-import { useTenant } from '@/api/queries.ts'
-import { useParams } from 'react-router-dom'
+import { useDeleteTenant, useTenant } from '@/api/queries.ts'
+import { useNavigate, useParams } from 'react-router-dom'
 import { Tenant } from '@/api'
 import { defaultPath, defaultRepositoryURL } from '@/pages/tenants/constants.ts'
 import clsx from 'clsx'
@@ -13,6 +13,7 @@ import { Button } from '@/components/button.tsx'
 import { stringify } from 'yaml'
 import { TextLink } from '@/components/text.tsx'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
+import { useCallback } from 'react'
 
 function TenantPath({ tenant }: { tenant: Tenant }) {
   const hasPath = !!tenant.source?.path
@@ -49,6 +50,16 @@ export default function TenantDetailsPage() {
     throw new Error('No tenant ID provided')
   }
   const { data, isLoading, isError } = useTenant(id)
+  const { mutate: deleteTenant } = useDeleteTenant()
+  const nav = useNavigate()
+  const handleDeleteTenant = useCallback(() => {
+    deleteTenant(id, {
+      onSuccess: () => {
+        nav('/tenants')
+      },
+    })
+  }, [deleteTenant, id, nav])
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="flex flex-row items-center justify-between">
@@ -81,6 +92,11 @@ export default function TenantDetailsPage() {
             </>
           )}
         </DescriptionList>
+      </div>
+      <div className="mt-6">
+        <Button color="red" onClick={handleDeleteTenant}>
+          Delete tenant
+        </Button>
       </div>
     </div>
   )
