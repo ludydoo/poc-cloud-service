@@ -35,8 +35,7 @@ export default function EditTenantPage() {
     reset({
       id: data.tenant.id,
       repoURL: data.tenant.source?.repoUrl || '',
-      targetRevision:
-        data.tenant.source?.targetRevision || defaultTargetRevision,
+      targetRevision: data.tenant.source?.targetRevision || '',
       helmValues: data.tenant.source?.helm?.values
         ? stringify(data.tenant.source?.helm?.values, null, 2)
         : '',
