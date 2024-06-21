@@ -8,10 +8,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	v1 "poc-cloud-service/gen/api/v1"
+	"poc-cloud-service/internal/constants"
 	"poc-cloud-service/internal/convert"
 	"poc-cloud-service/internal/store"
 	"poc-cloud-service/log"
@@ -20,27 +20,13 @@ import (
 	"time"
 )
 
-var applicationsGVR = schema.GroupVersionResource{
-	Group:    "argoproj.io",
-	Version:  "v1alpha1",
-	Resource: "applications",
-}
-
-var applicationGVK = schema.GroupVersionKind{
-	Group:   "argoproj.io",
-	Version: "v1alpha1",
-	Kind:    "Application",
-}
-
 const (
-	namespacePrefix          = "acs-"
 	isTenantLabel            = "is-tenant"
 	tenantLabel              = "tenant"
 	argoCdManagedBy          = "argocd.argoproj.io/managed-by"
 	managedByOpenshiftGitops = "openshift-gitops"
 	defaultRepoURL           = "https://github.com/ludydoo/poc-cloud-service-manifests"
 	defaultRepoPath          = "tenant-manifests"
-	openshiftGitopsNamespace = "openshift-gitops"
 )
 
 type Reconciler struct {
@@ -162,18 +148,18 @@ func deleteTenantApp(ctx context.Context, dynamicClient dynamic.Interface, tenan
 
 	l := log.FromContext(ctx)
 
-	got, err := dynamicClient.Resource(applicationsGVR).Namespace(openshiftGitopsNamespace).Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
+	got, err := dynamicClient.Resource(constants.ArgoApplicationsGVR).Namespace(constants.OpenshiftGitopsNamespace).Get(ctx, constants.NamespaceNameForTenant(tenant), metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			l.Info("Application already deleted", zap.String("name", getTenantNamespaceName(tenant)))
+			l.Info("Application already deleted", zap.String("name", constants.NamespaceNameForTenant(tenant)))
 			return nil
 		}
 		return err
 	}
 
 	if got.GetDeletionTimestamp() == nil {
-		l.Info("Deleting application", zap.String("name", getTenantNamespaceName(tenant)))
-		err = dynamicClient.Resource(applicationsGVR).Namespace(openshiftGitopsNamespace).Delete(ctx, getTenantNamespaceName(tenant), metav1.DeleteOptions{})
+		l.Info("Deleting application", zap.String("name", constants.NamespaceNameForTenant(tenant)))
+		err = dynamicClient.Resource(constants.ArgoApplicationsGVR).Namespace(constants.OpenshiftGitopsNamespace).Delete(ctx, constants.NamespaceNameForTenant(tenant), metav1.DeleteOptions{})
 		if !errors.IsNotFound(err) {
 			return err
 		}
@@ -190,10 +176,10 @@ func deleteTenantApp(ctx context.Context, dynamicClient dynamic.Interface, tenan
 		case <-ctx.Done():
 			return fmt.Errorf("timed out waiting for deletion")
 		case <-ticker.C:
-			got, err = dynamicClient.Resource(applicationsGVR).Namespace(openshiftGitopsNamespace).Get(ctx, getTenantNamespaceName(tenant), metav1.GetOptions{})
+			got, err = dynamicClient.Resource(constants.ArgoApplicationsGVR).Namespace(constants.OpenshiftGitopsNamespace).Get(ctx, constants.NamespaceNameForTenant(tenant), metav1.GetOptions{})
 			if err != nil {
 				if errors.IsNotFound(err) {
-					l.Info("Application deleted", zap.String("name", getTenantNamespaceName(tenant)))
+					l.Info("Application deleted", zap.String("name", constants.NamespaceNameForTenant(tenant)))
 					return nil
 				}
 				return err
@@ -204,7 +190,7 @@ func deleteTenantApp(ctx context.Context, dynamicClient dynamic.Interface, tenan
 
 // deleteTenantNamespace deletes the tenant namespace
 func deleteTenantNamespace(ctx context.Context, client kubernetes.Interface, tenantID string) error {
-	err := client.CoreV1().Namespaces().Delete(ctx, getTenantNamespaceName(tenantID), metav1.DeleteOptions{})
+	err := client.CoreV1().Namespaces().Delete(ctx, constants.NamespaceNameForTenant(tenantID), metav1.DeleteOptions{})
 	if !errors.IsNotFound(err) {
 		return err
 	}
@@ -214,18 +200,18 @@ func deleteTenantNamespace(ctx context.Context, client kubernetes.Interface, ten
 // ensureTenantApplication ensures that the tenant application exists
 func (r *Reconciler) ensureTenantApplication(ctx context.Context, tenant *v1.Tenant) error {
 	l := log.FromContext(ctx)
-	apps := r.dynamicClient.Resource(applicationsGVR)
+	apps := r.dynamicClient.Resource(constants.ArgoApplicationsGVR)
 	want, err := makeTenantApplication(tenant)
 	if err != nil {
 		return fmt.Errorf("failed to build desired application: %w", err)
 	}
-	got, err := apps.Namespace(openshiftGitopsNamespace).Get(ctx, getTenantNamespaceName(tenant.GetId()), metav1.GetOptions{})
+	got, err := apps.Namespace(constants.OpenshiftGitopsNamespace).Get(ctx, want.GetName(), metav1.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("failed to get application: %w", err)
 		}
 		l.Info("Creating application")
-		if _, err := apps.Namespace(openshiftGitopsNamespace).Create(ctx, want, metav1.CreateOptions{}); err != nil {
+		if _, err := apps.Namespace(constants.OpenshiftGitopsNamespace).Create(ctx, want, metav1.CreateOptions{}); err != nil {
 			return fmt.Errorf("failed to create application: %w", err)
 		}
 		return nil
@@ -240,7 +226,7 @@ func (r *Reconciler) ensureTenantApplication(ctx context.Context, tenant *v1.Ten
 	// update
 	l.Info("Updating application")
 	got.Object["spec"] = wantSpec
-	if _, err := apps.Namespace(openshiftGitopsNamespace).Update(ctx, got, metav1.UpdateOptions{}); err != nil {
+	if _, err := apps.Namespace(constants.OpenshiftGitopsNamespace).Update(ctx, got, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("failed to update application: %w", err)
 	}
 
@@ -258,7 +244,7 @@ func (r *Reconciler) ensureTenantNamespace(ctx context.Context, tenant *v1.Tenan
 		argoCdManagedBy: managedByOpenshiftGitops,
 	}
 
-	namespaceName := getTenantNamespaceName(tenant.GetId())
+	namespaceName := constants.NamespaceNameForTenant(tenant.GetId())
 
 	got, err := r.client.CoreV1().Namespaces().Get(ctx, namespaceName, metav1.GetOptions{})
 	if err != nil {
@@ -301,21 +287,16 @@ func (r *Reconciler) ensureTenantNamespace(ctx context.Context, tenant *v1.Tenan
 
 }
 
-// getTenantNamespaceName returns the namespace name for a tenant
-func getTenantNamespaceName(tenantID string) string {
-	return fmt.Sprintf("%s%s", namespacePrefix, tenantID)
-}
-
 // makeTenantApplication creates an ArgoCD Application object for a tenant
 func makeTenantApplication(tenant *v1.Tenant) (*unstructured.Unstructured, error) {
 	u := &unstructured.Unstructured{}
-	u.SetNamespace(openshiftGitopsNamespace)
-	u.SetName(getTenantNamespaceName(tenant.GetId()))
+	u.SetNamespace(constants.OpenshiftGitopsNamespace)
+	u.SetName(constants.ApplicationNameForTenant(tenant.GetId()))
 	u.SetLabels(map[string]string{
 		isTenantLabel: "true",
 		tenantLabel:   tenant.GetId(),
 	})
-	u.SetGroupVersionKind(applicationGVK)
+	u.SetGroupVersionKind(constants.ArgoApplicationGVK)
 
 	source := map[string]interface{}{
 		"repoURL": defaultRepoURL,
@@ -333,7 +314,7 @@ func makeTenantApplication(tenant *v1.Tenant) (*unstructured.Unstructured, error
 	}
 
 	helm := map[string]interface{}{
-		"releaseName": getTenantNamespaceName(tenant.GetId()),
+		"releaseName": constants.NamespaceNameForTenant(tenant.GetId()),
 	}
 
 	if values := tenant.GetSource().GetHelm().GetValues().AsMap(); len(values) > 0 {
@@ -351,7 +332,7 @@ func makeTenantApplication(tenant *v1.Tenant) (*unstructured.Unstructured, error
 		"source":  source,
 		"destination": map[string]interface{}{
 			"server":    "https://kubernetes.default.svc",
-			"namespace": getTenantNamespaceName(tenant.GetId()),
+			"namespace": constants.NamespaceNameForTenant(tenant.GetId()),
 		},
 		"syncPolicy": map[string]interface{}{
 			"automated": map[string]interface{}{

@@ -1,10 +1,12 @@
 apis/TenantServiceApi.ts
 apis/index.ts
 index.ts
+models/Application.ts
 models/CreateTenantRequest.ts
 models/CreateTenantResponse.ts
 models/DeleteTenantResponse.ts
 models/GetTenantResponse.ts
+models/Health.ts
 models/Helm.ts
 models/ListTenantsResponse.ts
 models/ProtobufAny.ts

@@ -164,6 +164,14 @@
     }
   },
   "definitions": {
+    "Application": {
+      "type": "object",
+      "properties": {
+        "health": {
+          "$ref": "#/definitions/Health"
+        }
+      }
+    },
     "CreateTenantRequest": {
       "type": "object",
       "properties": {
@@ -193,6 +201,17 @@
       "properties": {
         "tenant": {
           "$ref": "#/definitions/Tenant"
+        }
+      }
+    },
+    "Health": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
         }
       }
     },
@@ -241,6 +260,9 @@
         },
         "source": {
           "$ref": "#/definitions/Source"
+        },
+        "application": {
+          "$ref": "#/definitions/Application"
         }
       }
     },

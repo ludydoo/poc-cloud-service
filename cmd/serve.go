@@ -54,19 +54,18 @@ var serveCmd = &cobra.Command{
 		if err != nil {
 			home, err := os.UserHomeDir()
 			if err != nil {
-				return err
+				logger.Fatal("failed to get user home directory", zap.Error(err))
 			}
 			kubeConfigPath := path.Join(home, ".kube", "config")
 			config, err = clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 			if err != nil {
-				logger.Error("failed to create config", zap.Error(err))
-				return err
+				logger.Fatal("failed to create kubernetes config", zap.Error(err)	)
 			}
 		}
 
 		client, err := kubernetes.NewForConfig(config)
 		if err != nil {
-			return err
+			logger.Fatal("failed to create kubernetes client", zap.Error(err))
 		}
 
 		if len(dsn) == 0 {
@@ -77,19 +76,19 @@ var serveCmd = &cobra.Command{
 		}
 
 		if err := store.Migrate(ctx, dsn); err != nil {
-			return err
+			logger.Fatal("failed to migrate database", zap.Error(err))
 		}
 
 		pool, err := pgxpool.New(ctx, dsn)
 		if err != nil {
-			return err
+			logger.Fatal("failed to create pgx pool", zap.Error(err))
 		}
 
 		storeObj := store.New(pool)
 
 		dynamicClient, err := dynamic.NewForConfig(config)
 		if err != nil {
-			return err
+			logger.Fatal("failed to create dynamic client", zap.Error(err))
 		}
 
 		r := reconciler.NewReconciler(client, dynamicClient, storeObj)
@@ -97,11 +96,14 @@ var serveCmd = &cobra.Command{
 			r.Start(ctx)
 		}()
 
-		srv := server.NewServer(client, storeObj)
+		srv, err := server.NewServer(ctx, client, dynamicClient, storeObj)
+		if err != nil {
+			logger.Fatal("failed to create server", zap.Error(err))
+		}
 
 		listener, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
-			return err
+			logger.Fatal("failed to create listener", zap.Error(err))
 		}
 
 		defer func() {
@@ -121,7 +123,7 @@ var serveCmd = &cobra.Command{
 
 		_, grpcPort, err := net.SplitHostPort(grpcAddr)
 		if err != nil {
-			return err
+			logger.Fatal("failed to split host and port", zap.Error(err))
 		}
 
 		grpcClient, err := grpc.NewClient("localhost:"+grpcPort, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -136,7 +138,7 @@ var serveCmd = &cobra.Command{
 
 		mux := runtime.NewServeMux()
 		if err = v1.RegisterTenantServiceHandler(ctx, mux, grpcClient); err != nil {
-			return err
+			logger.Fatal("failed to register gateway TenantServiceHandler", zap.Error(err))
 		}
 
 		spa := spaHandler{staticPath: "ui/dist", indexPath: "index.html"}
@@ -152,9 +154,9 @@ var serveCmd = &cobra.Command{
 			Handler: handler,
 		}
 
-		logger.Info("starting server", zap.String("address", ":8081"))
+		logger.Info("starting server", zap.String("address", httpAddr))
 		if err := gwServer.ListenAndServe(); err != nil {
-			return err
+			logger.Fatal("failed to serve", zap.Error(err))
 		}
 
 		return nil

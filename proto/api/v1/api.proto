@@ -16,9 +16,19 @@ message Source {
   Helm helm = 4;
 }
 
+message Health {
+  string status = 1;
+  string message = 2;
+}
+
+message Application {
+  Health health = 1;
+}
+
 message Tenant {
   string id = 1;
   Source source = 2;
+  Application application = 3;
 }
 
 message ListTenantsRequest {}

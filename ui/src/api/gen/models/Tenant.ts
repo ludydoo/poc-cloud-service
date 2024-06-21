@@ -13,6 +13,12 @@
  */
 
 import { mapValues } from '../runtime';
+import type { Application } from './Application';
+import {
+    ApplicationFromJSON,
+    ApplicationFromJSONTyped,
+    ApplicationToJSON,
+} from './Application';
 import type { Source } from './Source';
 import {
     SourceFromJSON,
@@ -38,6 +44,12 @@ export interface Tenant {
      * @memberof Tenant
      */
     source?: Source;
+    /**
+     * 
+     * @type {Application}
+     * @memberof Tenant
+     */
+    application?: Application;
 }
 
 /**
@@ -59,6 +71,7 @@ export function TenantFromJSONTyped(json: any, ignoreDiscriminator: boolean): Te
         
         'id': json['id'] == null ? undefined : json['id'],
         'source': json['source'] == null ? undefined : SourceFromJSON(json['source']),
+        'application': json['application'] == null ? undefined : ApplicationFromJSON(json['application']),
     };
 }
 
@@ -70,6 +83,7 @@ export function TenantToJSON(value?: Tenant | null): any {
         
         'id': value['id'],
         'source': SourceToJSON(value['source']),
+        'application': ApplicationToJSON(value['application']),
     };
 }
 
