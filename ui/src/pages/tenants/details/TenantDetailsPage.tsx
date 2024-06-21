@@ -4,7 +4,7 @@ import {
   DescriptionList,
   DescriptionTerm,
 } from '@/components/description-list.tsx'
-import { useDeleteTenant, useTenant } from '@/api/queries.ts'
+import { tenantQueries, useDeleteTenant } from '@/api/queries.ts'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Tenant } from '@/api'
 import {
@@ -17,13 +17,15 @@ import { Button } from '@/components/button.tsx'
 import { stringify } from 'yaml'
 import { Text, TextLink } from '@/components/text.tsx'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Dialog,
   DialogActions,
   DialogBody,
   DialogTitle,
 } from '@/components/dialog.tsx'
+import TenantStatus from '@/components/tenantstatus.tsx'
+import { useQuery } from '@tanstack/react-query'
 
 function TenantPath({ tenant }: { tenant: Tenant }) {
   const hasPath = !!tenant.source?.path
@@ -71,7 +73,17 @@ export default function TenantDetailsPage() {
     throw new Error('No tenant ID provided')
   }
   const [showConfirmation, onShowConfirmation] = useState(false)
-  const { data, isLoading, isError } = useTenant(id)
+  const { data, isLoading, isError, refetch } = useQuery({
+    ...tenantQueries['one'](id),
+  })
+  // refetch every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetch()
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [refetch])
+
   const { mutate: deleteTenant } = useDeleteTenant()
   const nav = useNavigate()
   const handleDeleteTenant = useCallback(() => {
@@ -101,6 +113,10 @@ export default function TenantDetailsPage() {
         <DescriptionList>
           <DescriptionTerm>ID</DescriptionTerm>
           <DescriptionDetails>{data && data.tenant.id}</DescriptionDetails>
+          <DescriptionTerm>Status</DescriptionTerm>
+          <DescriptionDetails>
+            <TenantStatus status={data?.tenant?.application?.health?.status} />
+          </DescriptionDetails>
           {data && <TenantRepoUrl tenant={data.tenant} />}
           {data && <TenantPath tenant={data.tenant} />}
           {data && <TenantTargetRevision tenant={data.tenant} />}

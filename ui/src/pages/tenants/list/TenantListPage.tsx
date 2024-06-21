@@ -10,6 +10,8 @@ import {
 } from '@/components/table.tsx'
 import { Button } from '@/components/button.tsx'
 
+import TenantStatus from '@/components/tenantstatus.tsx'
+
 export default function TenantListPage() {
   const { data, isLoading, isError } = useTenants()
 
@@ -25,28 +27,32 @@ export default function TenantListPage() {
         <TableHead>
           <TableRow>
             <TableHeader>ID</TableHeader>
+            <TableHeader>Status</TableHeader>
           </TableRow>
         </TableHead>
         <TableBody>
           {isError && (
             <TableRow>
-              <TableCell>Failed to load tenants</TableCell>
+              <TableCell colSpan={2}>Failed to load tenants</TableCell>
             </TableRow>
           )}
           {isLoading && (
             <TableRow>
-              <TableCell>Loading</TableCell>
+              <TableCell colSpan={2}>Loading</TableCell>
             </TableRow>
           )}
           {data &&
             data.tenants.map((tenant, index) => (
               <TableRow to={`/tenants/${tenant.id}`} key={index}>
                 <TableCell>{tenant.id}</TableCell>
+                <TableCell>
+                  <TenantStatus status={tenant.application?.health?.status} />
+                </TableCell>
               </TableRow>
             ))}
           {data && data.tenants.length === 0 && (
             <TableRow>
-              <TableCell>No tenants found</TableCell>
+              <TableCell colSpan={2}>No tenants found</TableCell>
             </TableRow>
           )}
         </TableBody>
